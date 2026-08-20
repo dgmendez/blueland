@@ -80,6 +80,10 @@ HYPR_DEPS=(
 
 SDDM_PACKAGES=(
     sddm
+    sddm-themes
+    qt5-qtquickcontrols
+    qt5-qtquickcontrols2
+    qt5-qtgraphicaleffects
 )
 
 FONTS=(
@@ -121,13 +125,6 @@ log "Applying SDDM settings..."
 mkdir -p /etc/sddm.conf.d
 
 cat > /etc/sddm.conf.d/hyprland.conf << 'EOF'
-[Autologin]
-# User=tu_usuario
-# Session=hyprland
-
-[General]
-# Theme=breeze
-
 [Users]
 HideShells=/sbin/nologin,/usr/sbin/nologin,/bin/false,/usr/bin/false
 HideUsers=root

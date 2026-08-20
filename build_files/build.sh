@@ -1,27 +1,136 @@
 #!/bin/bash
-
 set -ouex pipefail
 
-# Copy the contents of system_files/ of the git repo to /
+log() {
+    echo "=== $1 ==="
+}
+
+# Copy system files early
 cp -avf "/ctx/system_files"/. /
 
-### Install packages
+#######################################################################
+# AGGRESSIVE BASE CLEANUP
+#######################################################################
+log "Removing unnecessary base packages..."
 
-# Packages can be installed from any enabled yum repo on the image.
-# RPMfusion repos are available by default in ublue main images
-# List of rpmfusion packages can be found here:
-# https://mirrors.rpmfusion.org/mirrorlist?path=free/fedora/updates/43/x86_64/repoview/index.html&protocol=https&redirect=1
+rpm -e --nodeps \
+    glibc-all-langpacks \
+    ibus \
+    ibus-libs \
+    ibus-gtk3 \
+    ibus-gtk4 \
+    ibus-setup \
+    ibus-panel \
+    python3-ibus \
+    ibus-anthy \
+    ibus-anthy-python \
+    ibus-hangul \
+    ibus-libpinyin \
+    ibus-m17n \
+    ibus-typing-booster \
+    ibus-chewing \
+    cosign \
+    python3-botocore \
+    google-noto-sans-cjk-fonts \
+    google-noto-serif-cjk-vf-fonts \
+    google-noto-sans-mono-cjk-vf-fonts \
+    default-fonts-cjk-serif \
+    default-fonts-cjk-mono \
+    cldr-emoji-annotation \
+    cldr-emoji-annotation-dtd \
+    2>/dev/null || true
 
-# this installs a package from fedora repos
-dnf5 install -y tmux
+#######################################################################
+# REPOSITORIES
+#######################################################################
+log "Adding COPR repositories..."
 
-# Use a COPR Example:
-#
-# dnf5 -y copr enable ublue-os/staging
-# dnf5 -y install package
-# Disable COPRs so they don't end up enabled on the final image:
-# dnf5 -y copr disable ublue-os/staging
+# Download repos directly since rpm-ostree lacks a 'copr enable' command
+wget https://copr.fedorainfracloud.org/coprs/ashbuk/Hyprland-Fedora/repo/fedora-$(rpm -E %fedora)/ashbuk-Hyprland-Fedora-fedora-$(rpm -E %fedora).repo -O /etc/yum.repos.d/hyprland.repo
+wget https://copr.fedorainfracloud.org/coprs/ulysg/xwayland-satellite/repo/fedora-$(rpm -E %fedora)/ulysg-xwayland-satellite-fedora-$(rpm -E %fedora).repo -O /etc/yum.repos.d/xwayland-satellite.repo
 
-#### Example for enabling a System Unit File
+#######################################################################
+# PACKAGE DEFINITIONS
+#######################################################################
+LANGPACKS=(
+    glibc-langpack-es
+)
 
+HYPR_PKGS=(
+    hyprland
+    hypridle
+    hyprlock
+    swaybg
+    xdg-desktop-portal-hyprland
+    xwayland-satellite
+)
+
+HYPR_DEPS=(
+    kitty
+    kitty-terminfo
+    waybar
+    wofi
+    mako
+    lxqt-policykit
+    grim
+    slurp
+    brightnessctl
+    playerctl
+)
+
+SDDM_PACKAGES=(
+    sddm
+)
+
+FONTS=(
+    google-noto-sans-fonts
+    google-noto-emoji-fonts
+    jetbrains-mono-fonts
+)
+
+#######################################################################
+# ATOMIC INSTALLATION
+#######################################################################
+log "Installing packages..."
+
+rpm-ostree install \
+    "${LANGPACKS[@]}" \
+    "${HYPR_PKGS[@]}" \
+    "${HYPR_DEPS[@]}" \
+    "${SDDM_PACKAGES[@]}" \
+    "${FONTS[@]}"
+
+log "Cleaning up ostree metadata..."
+rpm-ostree cleanup -m
+
+#######################################################################
+# CONFIGURATION & SERVICES
+#######################################################################
+log "Configuring system locale to es_MX.UTF-8..."
+echo "LANG=es_MX.UTF-8" > /etc/locale.conf
+echo "LC_ALL=es_MX.UTF-8" >> /etc/locale.conf
+
+log "Configuring timezone..."
+ln -sf /usr/share/zoneinfo/America/Mexico_City /etc/localtime
+
+log "Configuring services..."
+systemctl enable sddm.service
 systemctl enable podman.socket
+
+log "Applying SDDM settings..."
+mkdir -p /etc/sddm.conf.d
+
+cat > /etc/sddm.conf.d/hyprland.conf << 'EOF'
+[Autologin]
+# User=tu_usuario
+# Session=hyprland
+
+[General]
+# Theme=breeze
+
+[Users]
+HideShells=/sbin/nologin,/usr/sbin/nologin,/bin/false,/usr/bin/false
+HideUsers=root
+EOF
+
+log "Build finished successfully"
